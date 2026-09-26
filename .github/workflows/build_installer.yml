@@ -1,0 +1,85 @@
+name: Build Italian installer (Windows)
+
+# Build manuale da Actions oppure automatica su tag installer-v*.
+# Produce DeltaruneItalianInstaller.exe da installer/setup.iss + DeltaSetup.
+# Non tocca lang/ -> non interferisce con il workflow zip_lang.yml.
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "installer-v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-installer:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Italian pack
+        uses: actions/checkout@v4
+        with:
+          path: italian-pack
+
+      - name: Checkout DeltaSetup upstream
+        uses: actions/checkout@v4
+        with:
+          repository: Lazy-Desman/DeltaSetup
+          path: DeltaSetup
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Setup Inno Setup 6
+        run: choco install innosetup --no-progress -y
+        shell: powershell
+
+      - name: Apply Italian localization to patcher
+        shell: powershell
+        run: |
+          Copy-Item italian-pack/installer/LocalizedText.it.cs DeltaSetup/DeltaPatcherCLI/DeltaPatcher/LocalizedText.cs -Force
+          $csproj = "DeltaSetup/DeltaPatcherCLI/DeltaPatcher/DeltaPatcherCLI.csproj"
+          (Get-Content $csproj -Raw) `
+            -replace '<NeutralLanguage>en</NeutralLanguage>', '<NeutralLanguage>it</NeutralLanguage>' `
+            -replace '<ResourceLanguages>en</ResourceLanguages>', '<ResourceLanguages>it</ResourceLanguages>' `
+            -replace '<SatelliteResourceLanguages>en</SatelliteResourceLanguages>', '<SatelliteResourceLanguages>it</SatelliteResourceLanguages>' `
+            | Set-Content $csproj -NoNewline
+
+      - name: Publish DeltaPatcherCLI (win-x64, single file)
+        shell: powershell
+        run: |
+          dotnet publish DeltaSetup/DeltaPatcherCLI/DeltaPatcher/DeltaPatcherCLI.csproj -c Release -r win-x64 -m:1
+          $pub = "DeltaSetup/DeltaPatcherCLI/DeltaPatcher/bin/Release/net10.0/win-x64/publish/DeltaPatcherCLI.exe"
+          if (-not (Test-Path -LiteralPath $pub)) { throw "DeltaPatcherCLI.exe non trovato in $pub" }
+
+      - name: Pack DeltaPatcherCLI.7z + prepare Inno build dir
+        shell: powershell
+        run: |
+          7z a -t7z -mx=9 build/DeltaPatcherCLI.7z ./DeltaSetup/DeltaPatcherCLI/DeltaPatcher/bin/Release/net10.0/win-x64/publish/DeltaPatcherCLI.exe
+          New-Item -ItemType Directory build/innosetup -Force | Out-Null
+          Copy-Item italian-pack/installer/setup.iss build/innosetup/setup.iss
+          Copy-Item italian-pack/installer/*.bmp, italian-pack/installer/*.ico build/innosetup/ -Force
+          Copy-Item build/DeltaPatcherCLI.7z build/innosetup/DeltaPatcherCLI.7z
+          Get-ChildItem build/innosetup
+
+      - name: Compile installer with Inno Setup
+        shell: powershell
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" build/innosetup/setup.iss
+          Get-ChildItem build/innosetup/Output
+
+      - name: Upload exe as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DeltaruneItalianInstaller
+          path: build/innosetup/Output/DeltaruneItalianInstaller.exe
+
+      - name: Attach exe to release (only on tag)
+        if: startsWith(github.ref, 'refs/tags/installer-v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/innosetup/Output/DeltaruneItalianInstaller.exe
+          generate_release_notes: true
