@@ -42,7 +42,7 @@ it.wpWelcome7= - Traduzione completa del Capitolo 3
 it.wpWelcome8= - Traduzione completa del Capitolo 4
 it.wpWelcome9= - Traduzione completa del Capitolo 5
 it.wpWelcome10=La traduzione verrà applicata sopra la tua installazione attuale del gioco.
-it.wpWelcome11=I salvataggi resteranno intatti. Verrà fatto un backup dei data.win originali.
+it.wpWelcome11=I salvataggi resteranno intatti. Verrà creato un backup .bak dei data.win originali.
 it.CreateInputDirPage1=Seleziona la cartella di DELTARUNE
 it.CreateInputDirPage2=Dove è installato il gioco?
 it.CreateInputDirPage3=Seleziona la cartella che contiene "DELTARUNE.exe" e le cartelle "chapter1_windows" ... "chapter5_windows".
@@ -92,7 +92,7 @@ it.PatchSelectPage2=Menu
 it.PatchSelectPage3=Capitolo
 it.PatchSelectPage4=Installa solo le patch selezionate:
 it.PatchSelectPage5=Salta il download dei file di lingua
-it.PatchSelectPage6=Fai il backup dei file originali (consigliato)
+it.PatchSelectPage6=Crea backup dei file originali (preserva quelli già presenti)
 it.AdvancedButtonText=Avanzate
 it.PlatformLabel1=Seleziona la piattaforma di destinazione:
 it.PlatformWindows=Windows
@@ -106,6 +106,7 @@ it.PlatformXbox=Xbox
 it.BordersCheckbox=Aggiungi i bordi esclusivi console
 it.OutputPathPrompt=Cartella di output:
 it.OutputPathRequired=Seleziona una cartella di output.
+it.BackupError=Impossibile creare il backup del file "%s".
 
 [Files]
 Source: "DeltaPatcherCLI.7z"; DestDir: "{tmp}"; Flags: deleteafterinstall
@@ -114,9 +115,9 @@ Source: "DeltaPatcherCLI.7z"; DestDir: "{tmp}"; Flags: deleteafterinstall
 [Code]
 const
   LangURL = 'https://github.com/cmdr-chara/DeltaruneItalianPack/releases/download/latest/lang.7z';
-  LangURLMirror = 'https://github.com/cmdr-chara/DeltaruneItalianPack/releases/download/latest/lang.7z';
+  LangURLMirror = '';
   ScriptsURL = 'https://github.com/Lazy-Desman/DeltranslatePatch/releases/download/latest/scripts.7z';
-  ScriptsURLMirror = 'https://github.com/Lazy-Desman/DeltranslatePatch/releases/download/latest/scripts.7z';
+  ScriptsURLMirror = 'https://github.com/roberd82/DeltranslatePatch/releases/download/latest/scripts.7z';
   BordersURL = 'https://github.com/Lazy-Desman/DeltranslatePatch/releases/download/latest/borders.7z';
   BordersURLMirror = 'https://github.com/roberd82/DeltranslatePatch/releases/download/latest/borders.7z';
   DeltaruneExe = 'DELTARUNE.exe';
@@ -481,7 +482,7 @@ var
   TopOffset, i: Integer;
 begin
   SetLength(Checks, Length(FilesToPatch));
-  PopupForm := CreateCustomForm(ScaleX(260), ScaleY(230), False, False);
+  PopupForm := CreateCustomForm(ScaleX(300), ScaleY(285), False, False);
   try
     PopupForm.Caption := CustomMessage('PatchSelectPage1');
     PopupForm.Position := poScreenCenter;
@@ -794,7 +795,10 @@ begin
   
   FileSizeBytes := TryGetFileSize(MainURL);
   if FileSizeBytes <= 0 then
-    FileSizeBytes := TryGetFileSize(MirrorURL);
+  begin
+    if MirrorURL <> '' then
+      FileSizeBytes := TryGetFileSize(MirrorURL);
+  end;
   
   if FileSizeBytes > 0 then
   begin
@@ -807,7 +811,9 @@ begin
   
   if not TryDownloadFile(MainURL, FileName, DownloadCallback) then
   begin
-    if not TryDownloadFile(MirrorURL, FileName, DownloadCallback) then
+    if MirrorURL = '' then
+      RaiseException(CustomMessage('DownloadToTempWithMirror5') + ' ' + FileName)
+    else if not TryDownloadFile(MirrorURL, FileName, DownloadCallback) then
       RaiseException(CustomMessage('DownloadToTempWithMirror5') + ' ' + FileName);
   end;
 end;
@@ -986,6 +992,38 @@ begin
   Result := StrToIntDef(NumStr, -1);
 end;
 
+function GetDataWinPath(const GamePath: String; const Index: Integer): String;
+begin
+  if Index = 0 then
+    Result := AddBackslash(GamePath) + 'data.win'
+  else
+    Result := AddBackslash(GamePath) + 'chapter' + IntToStr(Index) + '_windows\data.win';
+end;
+
+procedure CreateBackupIfMissing(const GamePath: String; const Index: Integer);
+var
+  SourcePath, BackupPath: String;
+begin
+  SourcePath := GetDataWinPath(GamePath, Index);
+  if not FileExists(SourcePath) then
+    Exit;
+
+  BackupPath := SourcePath + '.bak';
+  if not FileExists(BackupPath) then
+    if not CopyFile(SourcePath, BackupPath, False) then
+      RaiseException(Format(CustomMessage('BackupError'), [BackupPath]));
+end;
+
+procedure PrepareBackups(const GamePath: String; const PatchAll: Boolean);
+var
+  i: Integer;
+begin
+  // Il patcher sovrascrive il file .bak: preserviamo sempre il primo backup.
+  for i := 0 to Length(FilesToPatch) - 1 do
+    if PatchAll or (not FilesToPatch[i]) then
+      CreateBackupIfMissing(GamePath, i);
+end;
+
 function DownloadAndExtractFiles(): Boolean;
 var
   LangZipPath, ScriptsZipPath, BordersZipPath, OverrideZipPath, OverrideDestDir, ApktoolPath, PatcherZipPath, GamePath, PatcherPath, ExceptionMsg, ArgString: String;
@@ -1150,11 +1188,6 @@ begin
       Inc(i);
     end;
 
-    if MakeBackups then
-    begin
-      ArgString := ArgString + ' --make-backups'
-    end;
-
     PatchAll := True;
     for i := 0 to Length(FilesToPatch) - 1 do begin
       if FilesToPatch[i] then
@@ -1174,6 +1207,9 @@ begin
         end;
       end;
     end;
+
+    if MakeBackups then
+      PrepareBackups(GamePath, PatchAll);
 
     if NeedsBorders then
     begin

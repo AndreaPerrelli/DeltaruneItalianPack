@@ -9,7 +9,7 @@ L'installer fa da solo ciò che il README descrive in ~18 passi manuali:
    (niente file lingua bundlati → rispetta `LICENSE.md`).
 3. Scarica `scripts.7z` dalla release `latest` di `DeltranslatePatch`
    (patcher sempre aggiornato, inclusa migrazione 2.x → 5.x Capitolo 5).
-4. Fa il backup dei `data.win` originali (`--make-backups`, attivo di default).
+4. Crea il backup dei `data.win` originali (`.bak`, attivo di default); i backup già presenti vengono preservati.
 5. Applica DeltranslatePatch + copia i file italiani in `lang/`.
 6. Supporta installazione offline: se accanto all'exe ci sono `lang.7z` /
    `scripts.7z`, l'installer chiede se usarli invece di scaricarli.
@@ -21,7 +21,7 @@ L'installer fa da solo ciò che il README descrive in ~18 passi manuali:
    (di solito già trovata in automatico).
 3. Avvia DELTARUNE → menu lingua Deltranslate → **Italiano**.
 
-Ripristino: verifica integrità file su Steam (i salvataggi restano).
+Ripristino: i file `.bak` originali vengono preservati; in alternativa verifica l'integrità dei file su Steam (i salvataggi restano).
 
 ## File in questa cartella
 

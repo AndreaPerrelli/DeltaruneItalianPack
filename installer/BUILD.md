@@ -61,8 +61,8 @@ con la grafica del pack e verificare `AppVersion` in `[Setup]`
 - Testare **solo** su copia/PC di test con DELTARUNE Steam completo
   (menu + `chapter1_windows`…`chapter5_windows`), mai sulla libreria principale
   senza backup.
-- Verificare: auto-detect Steam, backup creati, `lang/settings.json` italiano
-  presente, gioco avviabile con lingua Italiana.
+- Verificare: auto-detect Steam, backup `.bak` creati solo quando mancanti,
+  `lang/settings.json` italiano presente, gioco avviabile con lingua Italiana.
 - `AGENTS.md`: non committare mai `data.win` né file di gioco nel repo;
   l'installer li genera/patcha solo in locale.
 
